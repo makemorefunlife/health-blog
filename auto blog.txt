@@ -1,0 +1,51 @@
+{
+"name": "GitHub Blog Auto Writer",
+"nodes": [
+{
+"parameters": {
+"triggerTimes": {
+"item": [
+{
+"mode": "everyDay",
+"hour": 10,
+"minute": 0
+}
+]
+}
+},
+"name": "Daily Trigger",
+"type": "n8n-nodes-base.cron",
+"typeVersion": 1,
+"position": [200, 300]
+},
+{
+"parameters": {
+"url": "https://api.tavily.com/search",
+"method": "POST",
+"responseFormat": "json",
+"jsonParameters": true,
+"bodyParametersJson": "{\n "api_key": "YOUR_TAVILY_API_KEY",\n "query": "latest health research longevity metabolism gut microbiome",\n "max_results": 5\n}"
+},
+"name": "Tavily Search",
+"type": "n8n-nodes-base.httpRequest",
+"typeVersion": 2,
+"position": [420, 300]
+},
+{
+"parameters": {
+"functionCode": "const results = items[0].json.results || [];\n\nconst topic = results[0]?.title || "Health Research";\n\nreturn [{json:{topic}}];"
+},
+"name": "Extract Topic",
+"type": "n8n-nodes-base.function",
+"typeVersion": 1,
+"position": [640, 300]
+},
+{
+"parameters": {
+"resource": "chat",
+"operation": "create",
+"model": "gpt-4o-mini",
+"messages": [
+{
+"role": "system",
+"content": "You are a professional health blogger."

@@ -1,0 +1,361 @@
+{
+  "name": "Smart Health Blog Automation (RSS & Specified + GPT-4o mini)",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 10,
+              "minute": 30
+            }
+          ]
+        }
+      },
+      "id": "cron1",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 700]
+    },
+    {
+      "parameters": {
+        "url": "https://www.healthline.com/rss",
+        "options": {}
+      },
+      "id": "rssRead1",
+      "name": "Healthline RSS",
+      "type": "n8n-nodes-base.rssRead",
+      "typeVersion": 1,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://www.medicalnewstoday.com/rss",
+        "options": {}
+      },
+      "id": "rssRead2",
+      "name": "Medical News Today RSS",
+      "type": "n8n-nodes-base.rssRead",
+      "typeVersion": 1,
+      "position": [400, 350]
+    },
+    {
+      "parameters": {
+        "url": "https://www.health.harvard.edu/blog/feed",
+        "options": {}
+      },
+      "id": "rssRead3",
+      "name": "Harvard Health Publishing RSS",
+      "type": "n8n-nodes-base.rssRead",
+      "typeVersion": 1,
+      "position": [400, 500]
+    },
+    {
+      "parameters": {
+        "functionCode": "const allItems = [...$node['Healthline RSS'].json, ...$node['Medical News Today RSS'].json, ...$node['Harvard Health Publishing RSS'].json];\n\nconst keywords = new Set();\nallItems.forEach(item => {\n  if (item.title) {\n    item.title.split(/\\s+/).forEach(word => {\n      const cleanedWord = word.replace(/[^a-zA-Z가-힣]/g, '').toLowerCase();\n      if (cleanedWord.length > 3) { \n        keywords.add(cleanedWord);\n      }\n    });\n  }\n  if (item.categories && Array.isArray(item.categories)) {\n    item.categories.forEach(category => {\n      keywords.add(category.toLowerCase());\n    });\n  }\n});\n\nconst filteredKeywords = Array.from(keywords).filter(k => k.length > 0);\n\nconst selectedKeyword = filteredKeywords[Math.floor(Math.random() * filteredKeywords.length)];\n\nreturn [{ json: { allKeywords: filteredKeywords, keyword: selectedKeyword || 'health news', type: 'rss_hot' } }];"
+      },
+      "id": "extractFilterKeywords1",
+      "name": "Extract & Filter Keywords",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 350]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "mode": "any",
+          "value": [
+            {
+              "value1": "={{ $helpers.datetime.format('EEEE', $helpers.datetime.now()) }}",
+              "value2": "Tuesday",
+              "operator": "notEqual"
+            },
+            {
+              "value1": "={{ $helpers.datetime.format('EEEE', $helpers.datetime.now()) }}",
+              "value2": "Thursday",
+              "operator": "notEqual"
+            },
+            {
+              "value1": "={{ $helpers.datetime.format('EEEE', $helpers.datetime.now()) }}",
+              "value2": "Saturday",
+              "operator": "notEqual"
+            }
+          ]
+        }
+      },
+      "id": "if1",
+      "name": "Conditional Keyword Selection",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [800, 450]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { keyword: $node['Extract & Filter Keywords'].json[0].keyword, type: 'rss_hot' } }];"
+      },
+      "id": "selectHotKeyword1",
+      "name": "Select RSS Hot Keyword (Daily)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 350]
+    },
+    {
+      "parameters": {
+        "functionCode": "const predefinedKeywords = [\n  \"Lifestyle\",\n  \"Wellness\",\n  \"Sleep\",\n  \"Recovery\",\n  \"Brain Health\",\n  \"Mental Health\",\n  \"Supplements\",\n  \"Metabolism\",\n  \"Energy\",\n  \"Gut Health\",\n  \"Longevity\",\n  \"Aging\"\n];\n\nconst selectedPredefinedKeyword = predefinedKeywords[Math.floor(Math.random() * predefinedKeywords.length)];\n\nreturn [{ json: { keyword: selectedPredefinedKeyword, type: 'predefined' } }];"
+      },
+      "id": "selectPredefinedKeyword1",
+      "name": "Select Predefined Keyword (3x/Week)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 550]
+    },
+    {
+      "parameters": {
+        "url": "https://api.tavily.com/search",
+        "method": "POST",
+        "jsonParameters": true,
+        "responseFormat": "json",
+        "bodyParametersJson": "{ \"api_key\": \"[YOUR_TAVILY_API_KEY]\", \"query\": \"{{ $json.keyword }} latest health news analysis\", \"max_results\": 10 }"
+      },
+      "id": "tavilySearch1",
+      "name": "Tavily Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1200, 450]
+    },
+    {
+      "parameters": {
+        "functionCode": "const results = items[0].json.results || [];\n\nlet combinedArticles = '';\nresults.forEach((article, index) => {\n  combinedArticles += `Article ${index + 1}:\\nTitle: ${article.title}\\nURL: ${article.url}\\nContent: ${article.content}\\n\\n`;\n});\n\nreturn [{ json: { combinedArticles, keyword: items[0].json.keyword } }];"
+      },
+      "id": "formatResults1",
+      "name": "Format Results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1400, 450]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "authentication": "api",
+        "messages": {
+          "item": [
+            {
+              "content": "You are an SEO blog writer. Write a factual, SEO optimized blog post in Markdown format about the latest health news regarding the keyword: '{{ $json.keyword }}'. Use the provided articles from Tavily search as reference. Focus on key insights, potential benefits, and future outlook. Include a catchy title, a brief introduction, 3-5 main points with subheadings, and a conclusion. Suggest 3-5 relevant hashtags/tags at the end. Make sure the content is engaging and easy to understand for a general audience. The blog post should be around 500-700 words. Use only Korean. Incorporate SEO best practices such as keyword density, natural language, and readability.",
+              "type": "user"
+            },
+            {
+              "content": "Here are the articles for analysis: {{ $json.combinedArticles }}",
+              "type": "user"
+            }
+          ]
+        },
+        "temperature": 0.7
+      },
+      "id": "gpt4oMiniBlog1",
+      "name": "GPT-4o mini: Blog Post Draft",
+      "type": "n8n-nodes-base.chatLlm",
+      "typeVersion": 1,
+      "position": [1600, 450],
+      "credentials": {
+        "openAiApi": {
+          "id": "[YOUR_OPENAI_CREDENTIAL_ID]",
+          "name": "OpenAI API Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const blogPostContent = items[0].json.choices[0].message.content;\n\nconst titleMatch = blogPostContent.match(/^(#\\s*|##\\s*)(.*)/m);\nconst title = titleMatch ? titleMatch[2].trim() : '새로운 건강 인사이트';\n\nconst topicSlug = title.toLowerCase().replace(/[^a-z0-9ㄱ-힣]+/g, '-').replace(/^-*|-*$/g, '');\nconst now = new Date();\nconst dateString = now.toISOString().split('T')[0];\n\nconst frontMatter = `---\\ntitle: \\\"${title.replace(/\\\"/g, '\\\\\\\"')}\\\"\\ndate: ${dateString} 10:00:00 +0900\\ncategories:\\n  - Health\\ntags:\\n  - {{ $json.keyword.toLowerCase().replace(/\\s/g, '-') }}\\n---\\n\\n`;\n\nconst fullBlogPost = frontMatter + blogPostContent;\n\nreturn [{ json: { title, topicSlug, dateString, fullBlogPost, keyword: items[0].json.keyword } }];"
+      },
+      "id": "extractSlugify1",
+      "name": "Extract & Slugify Title",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1800, 450]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "repository": {
+          "owner": "makemorefunlife",
+          "repo": "[YOUR_BLOG_REPOSITORY_NAME]"
+        },
+        "path": "_posts/{{ $json.dateString }}-{{ $json.topicSlug }}.md",
+        "content": "{{ $json.fullBlogPost }}",
+        "operation": "create",
+        "commitMessage": "새로운 건강 블로그 게시글: {{ $json.title }}"
+      },
+      "id": "github1",
+      "name": "Publish to GitHub",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [2000, 450],
+      "credentials": {
+        "githubOAuth2Api": {
+          "id": "[YOUR_GITHUB_CREDENTIAL_ID]",
+          "name": "GitHub OAuth2 Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Healthline RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Medical News Today RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Harvard Health Publishing RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Healthline RSS": {
+      "main": [
+        [
+          {
+            "node": "Extract & Filter Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Medical News Today RSS": {
+      "main": [
+        [
+          {
+            "node": "Extract & Filter Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Harvard Health Publishing RSS": {
+      "main": [
+        [
+          {
+            "node": "Extract & Filter Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Filter Keywords": {
+      "main": [
+        [
+          {
+            "node": "Conditional Keyword Selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conditional Keyword Selection": {
+      "main": [
+        [
+          {
+            "node": "Select RSS Hot Keyword (Daily)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Select Predefined Keyword (3x/Week)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select RSS Hot Keyword (Daily)": {
+      "main": [
+        [
+          {
+            "node": "Tavily Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Predefined Keyword (3x/Week)": {
+      "main": [
+        [
+          {
+            "node": "Tavily Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Search": {
+      "main": [
+        [
+          {
+            "node": "Format Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Results": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o mini: Blog Post Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o mini: Blog Post Draft": {
+      "main": [
+        [
+          {
+            "node": "Extract & Slugify Title",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Slugify Title": {
+      "main": [
+        [
+          {
+            "node": "Publish to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
